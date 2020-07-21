@@ -62,7 +62,7 @@ def USGS_DailyDischargePlot(USGS_id, st, et, savefile=True, savefig=True):
         plt.savefig('USGS{}.png'.format(USGS_id), dpi=150)
 
     if savefile:
-        st.to_csv('USGS{}.csv'.format(USGS_id))
+        # st.to_csv('USGS{}.csv'.format(USGS_id))
         df = pd.DataFrame({'date':date, 'data':data})
         df.to_csv('USGS{}.csv'.format(USGS_id))
 

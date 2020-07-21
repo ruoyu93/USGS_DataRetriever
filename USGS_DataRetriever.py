@@ -15,7 +15,7 @@ def USGS_DailyDischargePlot(USGS_id, st, et, savefile=True, savefig=True):
     ## end_dt = '2018-12-31' # end date                               ##
     ##                                                                ## 
     ## DESCRIPTION:                                                   ##
-    ## Get data from USGS server. Retrieve daily discharge data       ##                             ##
+    ## Get data from USGS server. Retrieve daily discharge data       ##
     ## A function used to retrieve USGS daily discharge data          ##
     ##   Three inputs are required: Gage ID, start date, and end date ##
     ##   -- USGS Gage ID: string                                      ##

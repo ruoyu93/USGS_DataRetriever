@@ -5,56 +5,101 @@ Created on Thu Jun 18 15:25:18 2020
 @author: Ruoyu Zhang
 """
 
+import matplotlib.pyplot as plt
+from matplotlib import dates
+import pandas as pd
+import urllib
+import json
+import numpy as np
 
-def USGS_DailyDischargePlot(USGS_id, st, et, savefile=False, savefig=True):
+class USGS_Gage:
     
-    ####################################################################
-    ## A function used to retrieve USGS daily discharge data          ##
-    ##   Three inputs are required: Gage ID, start date, and end date ##
-    ##   -- USGS Gage ID: string                                      ##
-    ##   -- start/end date: string, format in YYYY-MM-DD              ##
-    ##   Optional savefile and savefig option                         ##
-    ####################################################################
+    def __init__(self, usgsid, st, ed, metric=True):
+        self.id = str(usgsid)
+        self.ismetric = metric
+        self.startdate = st
+        self.enddate = ed
+        self.data = None
     
+    # A method to get daily discharge time-series 
+    def getDailyDischarge(self):
+        # Get the JSON file from USGS server
+        url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&siteStatus=all'.format(
+                self.id, self.startdate, self.enddate)
+        response = json.loads(urllib.request.urlopen(url).read())
+        
+        # Retrieve the data from JSON file
+        pull = response['value']['timeSeries'][1]['values'][0]['value']
+        
+        # Get discharge values
+        if self.ismetric:
+            data = np.array([float(i['value']) for i in pull]) * 0.028316846988436  # Convert from cfs to cms
+        else:
+            data = [float(i['value']) for i in pull]                      # keep unit to be cfs
+        # Get dates
+        date = [i['dateTime'][0:10] for i in pull]
+        
+        # Organize data in a data frame
+        st = pd.DataFrame({'Date': date, 'Flow ({})'.format(self.getUnit()): data})
+        self.data = st
+        return st
     
-    # Load packages for data loading and plotting
-    import matplotlib.pyplot as plt
-    from matplotlib import dates
-    import pandas as pd
-    import urllib
-    import json
+    def getStatistics(self):
+        
+        # Call the method getDailyDischarge(), and define the start and end dates
+        if self.data is None:
+            self.data = self.getDailyDischarge()
+        
+        # Print the statistics of daily discharge
+        print("Summary of flow from",self.startdate,"to",self.enddate)
+        print("Min:", self.data.iloc[:,1].min())
+        print("Median:", self.data.iloc[:,1].median())
+        print("Max:", self.data.iloc[:,1].max())
+        print("Mean:", self.data.iloc[:,1].mean())
+        print("Standard Deviation:", self.data.iloc[:,1].std())
+        
+        # Save stats into a dictionary
+        stat_frame = {"Min": self.data.iloc[:,1].min(), "Median": self.data.iloc[:,1].median(), 
+                      "Max": self.data.iloc[:,1].max(), "Mean": self.data.iloc[:,1].mean(),
+                                     "Standard Deviation": self.data.iloc[:,1].std()}
+        return stat_frame
+    # A method to return the unit, either cfs or cms (cubit foot/meter per second)
+    def getUnit(self):
+        if self.ismetric:
+            unit = 'cms'
+        else:
+            unit = 'cfs'
+        return unit
     
+    # A method to plot user defined period of daily discharge
+    def plotTimeSeries(self, savefig=False):
+        
+        if self.data is None:
+            self.data = self.getDailyDischarge()
+        
+        # Set the frame of plot
+        fig, ax = plt.subplots(figsize=(15,5))
+        ax.plot(pd.to_datetime(self.data['Date']), pd.to_numeric(self.data['Flow ({})'.format(self.getUnit())]), linewidth=2)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel('Discharge {}'.format(self.getUnit()), fontsize=12)
+        ax.set_title('Discharge at USGS {}'.format(self.id),fontsize = 16)
+        
+        # If savefig is True, save the plot to local drive
+        if savefig:
+            fig.savefig('USGS_{}'.format(self.id))
     
-    # Retrieve daily discharge data
-    #      Define USGS site, start and end date
-    # USGS_id = '01665500'
-    # start_dt = '2015-01-01'
-    # end_dt = '2018-12-31'
-    # get data from USGS server
-    url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&siteStatus=all'.format(USGS_id, st, et)
-    response = json.loads(urllib.request.urlopen(url).read())
+    # A method to find the top X discharges and corresponding dates
+    def findLargestEvents(self, top_x):
+        if self.data is None:
+            self.data = self.getDailyDischarge()
+        # Sort the data in desending order and choose the top x events
+        dat = self.data.sort_values(by = ['Flow ({})'.format(self.getUnit())], ascending=False).reset_index(drop=True)
+        return dat.iloc[:top_x,]
     
-    
-    data = []
-    date = []
-    for i in response['value']['timeSeries'][1]['values'][0]['value']:
-        data.append(i['value'])
-        date.append(i['dateTime'][0:10])
-    
-    
-    # Plotting daily discharge time-series
-    fig, ax = plt.subplots(figsize=(15,5))
-    ax.plot(pd.to_datetime(date), pd.to_numeric(data), linewidth=2)
-    ax.set_xlabel('Date', fontsize=12)
-    ax.set_ylabel('Discharge (cfs)', fontsize=12)
-    ax.set_title('Discharge at USGS {}'.format(USGS_id),fontsize = 16)
-    
-    if savefig:
-        plt.savefig('USGS{}.png'.format(USGS_id), dpi=150)
-    if savefile:
-        st.to_csv('USGS{}.csv'.format(USGS_id))
+## Test example
+        
+## start_date = '2010-01-01'
+## end_date = '2015-12-31'
+## site = USGS_Gage('01665500', start_date, end_date, metric=False)
 
-
-# Example
-# Plot figure saved to the same directory as .py file
-USGS_DailyDischargePlot(USGS_id = '01665500', st='2015-01-01', et='2016-12-31')
+## data = site.getDailyDischarge()

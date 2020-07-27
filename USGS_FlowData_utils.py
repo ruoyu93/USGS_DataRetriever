@@ -4,6 +4,8 @@ import pandas as pd
 import urllib
 import json
 import numpy as np
+from bs4 import BeautifulSoup
+import requests
 
 class USGS_Gage:
     
@@ -89,11 +91,36 @@ class USGS_Gage:
         dat = self.data.sort_values(by = ['Flow ({})'.format(self.getUnit())], ascending=False).reset_index(drop=True)
         return dat.iloc[:top_x,]
     
+    def getMetaData(self):
+        url = f'https://waterdata.usgs.gov/va/nwis/uv?site_no={self.id}'
+        response = requests.get(url)
+        html = response.content
+        # use Beuatifulsoup to print tidier html
+        soup = BeautifulSoup(html,features="lxml")
+        #print (soup)
+        rows = soup.find_all('tr')
+        table = [[td.getText() for td in rows[i].findAll('td')]
+                    for i in range(len(rows))]
+        # extract metadata
+        iterRow = 2
+        metaData = []
+        while table[iterRow] != []:
+            variableName = table[iterRow][1].split()[1]
+            variableID = table[iterRow][1].split()[0]
+            startDate = table[iterRow][2]
+            endDate = table[iterRow][3]
+            newL = [{variableName:variableID},
+                                       {"startDate":startDate},{"endDate":endDate}]
+            metaData.append(newL)
+            iterRow += 1
+        return metaData
 ## Test example
         
-## start_date = '2010-01-01'
-## end_date = '2015-12-31'
-## site = USGS_Gage('01665500', start_date, end_date, metric=False)
+start_date = '2010-01-01'
+end_date = '2015-12-31'
+site = USGS_Gage('02040000', start_date, end_date, metric=False)
 
-## data = site.getDailyDischarge()
+data = site.getDailyDischarge()
+mD = site.getMetaData()
+
 

@@ -7,6 +7,9 @@ import numpy as np
 from bs4 import BeautifulSoup
 import requests
 
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
+
 # Super Class: get MetaData for a gage
 class USGS_Gage:
     
@@ -15,7 +18,7 @@ class USGS_Gage:
         self.vars_info = None
         self.geo_info = {}
         
-    def getVarMetaData(self):
+    def getVarsMetaData(self):
         
         # 1) get variable list and each time span
         url = f'https://waterdata.usgs.gov/va/nwis/uv?site_no={self.id}'
@@ -49,8 +52,8 @@ class USGS_Gage:
         print('USGS Gage', self.id, 'has following variables:')
         out_frame = pd.DataFrame(columns = ['Variable Name', 'Variable ID', 'Start Date', 'End Date'])
         for i in range(len(metaData['Variables'])):
-            print(metaData['Variables'][i]['variableName'], "from {} to {}".format(metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']))
-            out_frame.loc[i] = [metaData['Variables'][i]['variableID'], metaData['Variables'][i]['variableName'], 
+            print("{:>10} from {} to {}".format(metaData['Variables'][i]['variableName'], metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']))
+            out_frame.loc[i] = [metaData['Variables'][i]['variableName'], metaData['Variables'][i]['variableID'], 
                                 metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']]
         print()
         return out_frame
@@ -64,19 +67,19 @@ class USGS_Gage:
         
         county_list = pd.read_csv('https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt', dtype=str, header=None)
         county_list['FIPS'] = county_list[1] + county_list[2]
-        county, state = county_list[county_list['FIPS']==siteCode].values[0][3].split()[0], county_list[county_list['FIPS']==siteCode].values[0][1]
+        county, state = county_list[county_list['FIPS']==siteCode].values[0][3].split()[0], county_list[county_list['FIPS']==siteCode].values[0][0]
         
-        self.site_geoinfo['County'] = county
-        self.site_geoinfo['State'] = state
-        self.site_geoinfo['Coordinate'] = (geoLocation['latitude'], geoLocation['longitude']) 
+        self.geo_info['County'] = county
+        self.geo_info['State'] = state
+        self.geo_info['Coordinate'] = (geoLocation['latitude'], geoLocation['longitude']) 
         
         print('USGS Gage', self.id, 'locates at:')
-        print('{} county, {}. Coordinate: {}\n'.format(county, state, (geoLocation['latitude'], geoLocation['longitude'])))
+        print('{} county, {}. Site coordinates: {}\n'.format(county, state, (geoLocation['latitude'], geoLocation['longitude'])))
         return {'Gage': self.id, 'County': county,'State': state,'Coordiantes':(geoLocation['latitude'], geoLocation['longitude'])}
         
 class USGS_Gage_DataRetrieve(USGS_Gage):
     
-    def __init__(self, usgsid, st=None, ed=None, metric=True):
+    def __init__(self, usgsid, st, ed, metric=True, autoDates=False):
         USGS_Gage.__init__(self, str(usgsid))
         self.id = str(usgsid)
         self.ismetric = metric
@@ -84,8 +87,17 @@ class USGS_Gage_DataRetrieve(USGS_Gage):
         self.startdate = st
         self.enddate = ed
         self.data = None
-    
-    
+        self.autodate = autoDates
+        if self.autodate:
+            print('Overwrite the start and end dates based on variable time period.\n')
+            print('Retrieving MetaData now')
+            vars_info = self.getVarsMetaData()
+            self.startdate = vars_info['Start Date'][vars_info['Variable Name'] == 'Discharge'][0]
+            self.enddate = vars_info['End Date'][vars_info['Variable Name'] == 'Discharge'][0]
+            
+            print('.........................................\nNew dates from',self.startdate,'to',self.enddate)
+            
+            
     # A method to get daily discharge time-series 
     def getDailyDischarge(self):
         # Get the JSON file from USGS server
@@ -95,7 +107,7 @@ class USGS_Gage_DataRetrieve(USGS_Gage):
             response = json.loads(urllib.request.urlopen(url).read())
             
             # Retrieve the data from JSON file
-            pull = response['value']['timeSeries'][0]['values'][0]['value']   # [1] will sometimes return wrong variable
+            pull = response['value']['timeSeries'][0]['values'][0]['value']
             
             # Get discharge values
             if self.ismetric:
@@ -170,14 +182,15 @@ class USGS_Gage_DataRetrieve(USGS_Gage):
 
 ## Test example
         
-#start_date = '2010-01-01'
-#end_date = '2015-12-31'
-#site = USGS_Gage_DataRetrieve('02037500',start_date,end_date, metric=False)
+start_date = '2010-01-01'
+end_date = '2015-12-31'
+site = USGS_Gage_DataRetrieve('02037500', start_date, end_date, metric=False, autoDates=True)
 
-#data = site.getDailyDischarge()
-#site.getGeoMetaData()
-#site.getVarMetaData()
+data = site.getDailyDischarge()
+geo_meta = site.getGeoMetaData()
+vars_meta = site.getVarsMetaData()
 
+site.plotTimeSeries()
 ## Print variables and start/end dates
 
 

@@ -113,14 +113,23 @@ class USGS_Gage:
                                        {"startDate":startDate},{"endDate":endDate}]
             metaData.append(newL)
             iterRow += 1
+        # extract county, longtidue and latitude
+        url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&siteStatus=all'.format(
+                self.id, self.startdate, self.enddate)
+        response = json.loads(urllib.request.urlopen(url).read())
+        geogLocation = response['value']['timeSeries'][1]["sourceInfo"]["geoLocation"]["geogLocation"]
+        siteCode = response['value']['timeSeries'][1]["sourceInfo"]["siteCode"][0]
+        metaData.append(geogLocation)
+        metaData.append(siteCode)
         return metaData
+
+
 ## Test example
         
-start_date = '2010-01-01'
-end_date = '2015-12-31'
-site = USGS_Gage('02040000', start_date, end_date, metric=False)
-
-data = site.getDailyDischarge()
-mD = site.getMetaData()
-
+#start_date = '2010-01-01'
+#end_date = '2015-12-31'
+#site = USGS_Gage('02011490', start_date, end_date, metric=False)
+#
+#data = site.getDailyDischarge()
+#mD = site.getMetaData()
 

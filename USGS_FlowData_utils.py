@@ -10,6 +10,8 @@ import requests
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
+US_county_list = pd.read_csv('https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt', dtype=str, header=None)
+
 # Super Class: get MetaData for a gage
 class USGS_Gage:
     
@@ -59,13 +61,25 @@ class USGS_Gage:
         return out_frame
     
     def getGeoMetaData(self):
+        if len(self.vars_info) == None:
+            var_info = self.getVarsMetaData()
+            var_id = var_info.loc[0]['Variable ID']
+            start_dt = var_info.loc[0]['Start Date']
+            end_dt = str(pd.to_datetime(start_dt) + pd.Timedelta('10 day')).split()[0]
+        else:
+            var_info = self.vars_info
+            var_id = var_info['Variables'][0]['variableID']
+            start_dt = var_info['Variables'][0]['startDate']
+            end_dt = str(pd.to_datetime(start_dt) + pd.Timedelta('10 day')).split()[0]
         # Get its geoLocation and county, state
-        url1 = 'https://waterservices.usgs.gov/nwis/iv/?format=json&sites={}&siteStatus=all'.format(self.id)
+        
+        
+        url1 = 'https://waterservices.usgs.gov/nwis/iv/?format=json&sites={}&startDT={}&endDT={}&parameterCd={}&siteStatus=all'.format(self.id, start_dt, end_dt, var_id)
         response = json.loads(urllib.request.urlopen(url1).read())
         geoLocation = response['value']['timeSeries'][0]["sourceInfo"]["geoLocation"]["geogLocation"]
-        siteCode = str(response['value']['timeSeries'][0]["sourceInfo"]["siteProperty"][3]['value'])
+        siteCode = str(response['value']['timeSeries'][0]["sourceInfo"]["siteProperty"][3]['value'])     ### Make this a build-in file
         
-        county_list = pd.read_csv('https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt', dtype=str, header=None)
+        county_list = US_county_list
         county_list['FIPS'] = county_list[1] + county_list[2]
         county, state = county_list[county_list['FIPS']==siteCode].values[0][3].split()[0], county_list[county_list['FIPS']==siteCode].values[0][0]
         
@@ -181,17 +195,16 @@ class USGS_Gage_DataRetrieve(USGS_Gage):
         return dat.iloc[:top_x,]
 
 ## Test example
-        
+
+usgs_gages = pd.read_csv('gages_list.csv', dtype=str)
 start_date = '2010-01-01'
 end_date = '2015-12-31'
-site = USGS_Gage_DataRetrieve('02037500', start_date, end_date, metric=False, autoDates=True)
 
-data = site.getDailyDischarge()
-geo_meta = site.getGeoMetaData()
-vars_meta = site.getVarsMetaData()
+site = USGS_Gage_DataRetrieve('02032000', start_date, end_date, metric=True, autoDates=True)
+site.getVarsMetaData()
+site.getGeoMetaData()
 
-site.plotTimeSeries()
-## Print variables and start/end dates
+
 
 
 

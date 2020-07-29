@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from matplotlib import dates
 import pandas as pd
 import urllib.request
 import json
@@ -79,7 +78,7 @@ class USGS_Gage:
         print('USGS Gage', self.id, 'locates at:')
         print('{} county, {}. Site coordinates: {}\n'.format(county, state, (geoLocation['latitude'], geoLocation['longitude'])))
         print('-------------------------------------------------------------------------------------------------------')
-        return {'Gage': self.id, 'County': county,'State': state,'Coordiantes':(geoLocation['latitude'], geoLocation['longitude'])}
+        return {'Gage': self.id, 'County': county,'CountyFIPS': siteCode,'State': state,'Coordiantes':(geoLocation['latitude'], geoLocation['longitude'])}
         
 class USGS_Gage_DataRetriever(USGS_Gage):
     
@@ -197,19 +196,19 @@ class USGS_Gage_DataRetriever(USGS_Gage):
 
 
 ## Test example
-import time
-stime = time.time()
-data = pd.read_csv("va_gages.csv", dtype=str)
-for i in range(0,30):
-    rcode = data["SOURCE_FEA"][i]
-    try:
-        site = USGS_Gage_DataRetriever(rcode,  metric=False)
-        site.getDailyDischarge()
-        site.getGeoMetaData()
-    except:
-        print("")
-        continue
-print(time.time()-stime)
+#import time
+#stime = time.time()
+#data = pd.read_csv("va_gages.csv", dtype=str)
+#for i in range(0,30):
+#    rcode = data["SOURCE_FEA"][i]
+#    try:
+#        site = USGS_Gage_DataRetriever(rcode,  metric=False)
+#        site.getDailyDischarge()
+#        # site.getGeoMetaData()
+#    except:
+#        print("")
+#        continue
+#print(time.time()-stime)
 
 
 

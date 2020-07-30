@@ -221,12 +221,14 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y-%m')).Flow.agg(['mean'])
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
                 valid_flag = False
+                reason = "data shortage"
                 print(f'    Data at this gage has records shorter than your defined {least_records} months.\n')
 
         elif time_scale == 'Y': # Yearly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y')).Flow.agg(['mean'])
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
                 valid_flag = False
+                reason = "data shortage"
                 print(f'    Data at this gage has records shorter than your defined {least_records} years.\n')
 
         else:
@@ -281,7 +283,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             R_TS = np.nan
             R_MK = np.nan
 
-        return trend_result, slope_result, R_TS, R_MK
+        return trend_result, slope_result, R_TS, R_MK, reason
 
 
 ## Test example

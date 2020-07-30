@@ -38,31 +38,39 @@ class USGS_Gage:
             endDate = table[iterRow][3]
             metaData['Variables'].append({"variableID":variableID, 'variableName':variableName, 
                              "startDate":startDate, 'endDate':endDate})
+        
         if metaData == {'Variables': []}: 
             raise Exception("No Data Found at This Gage!\n")
         else:
-            print(metaData)
             self.vars_info = metaData
             
-            print('-------------------------------------------------------------------------------------------------------')
+            print('----------------------------------------------------------')
             print('USGS Gage', self.id, 'has following variables:')
             out_frame = pd.DataFrame(columns = ['Variable Name', 'Variable ID', 'Start Date', 'End Date'])
             for i in range(len(metaData['Variables'])):
-                print("{:>10} from {} to {}".format(metaData['Variables'][i]['variableName'], metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']))
+                print("    {:>15} from {} to {}".format(metaData['Variables'][i]['variableName'], metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']))
                 out_frame.loc[i] = [metaData['Variables'][i]['variableName'], metaData['Variables'][i]['variableID'], 
                                     metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']]
-            print('-------------------------------------------------------------------------------------------------------')
+            print('----------------------------------------------------------')
             print()
             return out_frame
     
     def getGeoMetaData(self):
         # grab Geo meta data from only a 3-day period
-        date = datetime.strptime(self.startdate, "%Y-%m-%d")
+        if self.vars_info == None:
+            vars_info = self.getVarsMetaData()
+            s_date = vars_info['Start Date'].values[0]
+            var_id = vars_info['Variable ID'].values[0]
+        else:
+            s_date = self.vars_info['Variables'][0]['startDate']
+            var_id = self.vars_info['Variables'][0]['variableID']
+
+        date = datetime.strptime(s_date, "%Y-%m-%d")
         modified_date = date + timedelta(days=3)
         date_3daysAfter = datetime.strftime(modified_date, "%Y-%m-%d") # 3 days later
         # Get its geoLocation and county, state
-        url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&parameterCd=00060&siteStatus=all'.format(
-                    self.id, self.startdate, date_3daysAfter)
+        url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&parameterCd={}&siteStatus=all'.format(
+                    self.id, self.startdate, date_3daysAfter, var_id)
         response = json.loads(urllib.request.urlopen(url).read())
         geoLocation = response['value']['timeSeries'][0]["sourceInfo"]["geoLocation"]["geogLocation"]
         siteCode = str(response['value']['timeSeries'][0]["sourceInfo"]["siteProperty"][3]['value'])
@@ -74,10 +82,10 @@ class USGS_Gage:
         self.geo_info['State'] = state
         self.geo_info['Coordinate'] = (geoLocation['latitude'], geoLocation['longitude']) 
         
-        print('-------------------------------------------------------------------------------------------------------')
+        print('---------------------------------------------------------------')
         print('USGS Gage', self.id, 'locates at:')
-        print('{} county, {}. Site coordinates: {}\n'.format(county, state, (geoLocation['latitude'], geoLocation['longitude'])))
-        print('-------------------------------------------------------------------------------------------------------')
+        print('    {} county, {}. Site coordinates: {}\n'.format(county, state, (geoLocation['latitude'], geoLocation['longitude'])))
+        print('---------------------------------------------------------------')
         return {'Gage': self.id, 'County': county,'CountyFIPS': siteCode,'State': state,'Coordiantes':(geoLocation['latitude'], geoLocation['longitude'])}
         
 class USGS_Gage_DataRetriever(USGS_Gage):
@@ -89,28 +97,29 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         self.data = None
         self.autodate = autoDates
         if (self.autodate is True) & (st is None) & (ed is None):
+            print('---------------------------------------------------------------')
             print('Retrieving MetaData for Discharge time period')
             try:
                 vars_info = self.getVarsMetaData()
                 self.startdate = vars_info['Start Date'][vars_info['Variable ID'] == '00060'].values[0]
                 self.enddate = vars_info['End Date'][vars_info['Variable ID'] == '00060'].values[0]
-                print('.........................................\nNew dates from',self.startdate,'to',self.enddate)
+                print('    New dates from',self.startdate,'to',self.enddate)
             except:
                 raise Exception("No Data Found at This Gage!")
         elif (autoDates is True) & (st is not None) & (ed is not None):   # if user spe
-            print('.............................................\nOverwrite the start and end dates based on variable time period.\n')
+            print('....Overwrite the start and end dates based on variable time period.\n')
             try:
                 vars_info = self.getVarsMetaData()
                 self.startdate = vars_info['Start Date'][vars_info['Variable ID'] == '00060'].values[0]
                 self.enddate = vars_info['End Date'][vars_info['Variable ID'] == '00060'].values[0]
-                print('.........................................\nNew dates from',self.startdate,'to',self.enddate)
+                print('    New dates from',self.startdate,'to',self.enddate)
             except:
                 raise Exception("No Data Found at This Gage!")
         elif (autoDates is False) & (st is not None) & (ed is not None):
             self.startdate = vars_info['Start Date'][vars_info['Variable ID'] == '00060'].values[0]
             self.enddate = vars_info['End Date'][vars_info['Variable ID'] == '00060'].values[0]
         else:
-            raise Exception("No dates defined! You need to define start date (end date) or set autoDates to True!")
+            raise Exception(''' ERROR:\nNo dates defined! You need to define start date (end date) or set autoDates to True!''')
             
     # A method to get daily discharge time-series 
     def getDailyDischarge(self):
@@ -136,8 +145,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             self.data = st
             return st
         except:
-            print('No Discharge Data at this gage!')
-            print('Choose another gage...')
+            raise Exception('ERROR:\nNO Discharge Data at this gage! \nChoose another gage')
             
             
     
@@ -149,11 +157,11 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         
         # Print the statistics of daily discharge
         print("Summary of flow from",self.startdate,"to",self.enddate)
-        print("Min:", self.data.iloc[:,1].min())
-        print("Median:", self.data.iloc[:,1].median())
-        print("Max:", self.data.iloc[:,1].max())
-        print("Mean:", self.data.iloc[:,1].mean())
-        print("Standard Deviation:", self.data.iloc[:,1].std(),'\n')
+        print("    Min:", self.data.iloc[:,1].min())
+        print("    Median:", self.data.iloc[:,1].median())
+        print("    Max:", self.data.iloc[:,1].max())
+        print("    Mean:", self.data.iloc[:,1].mean())
+        print("    Standard Deviation:", self.data.iloc[:,1].std(),'\n')
         
         # Save stats into a dictionary
         stat_frame = {"Min": self.data.iloc[:,1].min(), "Median": self.data.iloc[:,1].median(), 

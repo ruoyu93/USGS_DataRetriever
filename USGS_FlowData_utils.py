@@ -5,8 +5,10 @@ import json
 import numpy as np
 from bs4 import BeautifulSoup
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pandas.plotting import register_matplotlib_converters
+from scipy import stats
+import mkt
 register_matplotlib_converters()
 
 # Super Class: get MetaData for a gage
@@ -129,7 +131,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             else:
                 data = [float(i['value']) for i in pull]                      # keep unit to be cfs
             # Get dates
-            date = [i['dateTime'][0:10] for i in pull]
+            date = pd.to_datetime([i['dateTime'][0:10] for i in pull]) # HK: save the date to datetime format
             
             # Organize data in a data frame
             st = pd.DataFrame({'Date': date, 'Flow ({})'.format(self.getUnit()): data})
@@ -139,8 +141,6 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             print('No Discharge Data at this gage!')
             print('Choose another gage...')
             
-            
-    
     def getStatistics(self):
         
         # Call the method getDailyDischarge(), and define the start and end dates
@@ -193,7 +193,85 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         # Sort the data in desending order and choose the top x events
         dat = self.data.sort_values(by = ['Flow ({})'.format(self.getUnit())], ascending=False).reset_index(drop=True)
         return dat.iloc[:top_x,]
+    
 
+    def trendTest(self, time_scale, target_alpha): #HKM added / Jul.30.2020
+
+        if self.data is None:
+            self.data = self.getDailyDischarge()
+
+        t_Q = self.data.rename(columns={'Flow ({})'.format(self.getUnit()):'Flow'})
+
+        # If we have a date gap, we should modify this code lines
+        # Here, I assume that USGS provides continuous data
+        valid_flag = True
+        if time_scale == 'M': # Monthly trend
+            t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y-%m')).Flow.agg(['mean'])
+            nod = len(t_Q_aggr)
+
+            if nod < 120: # We should have more than 10-year lenth of data
+                valid_flag = False
+
+        elif time_scale == 'Y': # Yearly trend
+            t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y')).Flow.agg(['mean'])
+            nod = len(t_Q_aggr)
+            if nod < 10: # We should have more than 10-year lenth of data
+                valid_flag = False
+
+        else:
+            print('Please select M (monthly trend) or Y (yearly trend)')
+            valid_flag = False
+
+        if valid_flag:
+            x = np.arange((len(t_Q_aggr)))
+            y = t_Q_aggr.to_numpy().ravel()
+
+            # Theilslopes
+            R_TS = stats.theilslopes(y, x, alpha = 1 - target_alpha)
+            """            
+            Ruetunrs:
+            1) medslope : float
+                Theil slope.
+            2) medintercept : float
+                Intercept of the Theil line, as median(y) - medslope*median(x).
+            3) lo_slope : float
+                Lower bound of the confidence interval on medslope.
+            4) up_slope : float
+                Upper bound of the confidence interval on medslope.
+            https://docs.scipy.org/doc/scipy-0.15.1/reference/generated/scipy.stats.mstats.theilslopes.html
+            """
+
+            # Mann Kendall Trend Test
+            R_MK = mkt.test(x, y, 1, target_alpha,"upordown")
+            """
+            Returns
+            1) MK : string
+                result of the statistical test indicating whether or not to accept hte
+                alternative hypothesis 'Ha'
+            2) m : scalar, float
+                slope of the linear fit to the data
+            3) c : scalar, float
+                intercept of the linear fit to the data
+            4) p : scalar, float, greater than zero
+                p-value of the obtained Z-score statistic for the Mann-Kendall test
+            # https://up-rs-esp.github.io/mkt/_modules/mkt.html
+            """
+            if (R_MK[3] < target_alpha) & (R_MK[1] > 0):
+                trend_result = 1 # increasing trend
+                slope_result = R_TS[0]
+            elif (R_MK[3] < target_alpha) & (R_MK[1] < 0):
+                trend_result = -1 # decreasing trend
+                slope_result = R_TS[0]
+            else:
+                trend_result = 0 # no trend
+                slope_result = 0
+        else: # Any cases we cannot conduct the trend analysis
+            trend_result = False
+            slope_result = False
+            R_TS = False
+            R_MK = False
+
+        return trend_result, slope_result, R_TS, R_MK
 
 ## Test example
 #import time
@@ -210,10 +288,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
 #        continue
 #print(time.time()-stime)
 
-
-
-
-
-
-
-
+## Trend Test example
+site=USGS_Gage_DataRetriever(usgsid='02034000')
+trend_result, slope_result, R_TS, R_MK = site.trendTest('M',0.05)
+print(R_MK[0], '\nTrend? (0: no trend, -1: downard trend, 1: upward trend): {0}\nSlope? {1}'.format(trend_result, trend_result))

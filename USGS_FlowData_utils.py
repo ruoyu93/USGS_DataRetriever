@@ -5,8 +5,10 @@ import json
 import numpy as np
 from bs4 import BeautifulSoup
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pandas.plotting import register_matplotlib_converters
+from scipy import stats
+import mkt
 register_matplotlib_converters()
 
 # Super Class: get MetaData for a gage
@@ -88,7 +90,8 @@ class USGS_Gage:
         print('    {} county, {}. Site coordinates: {}\n'.format(county, state, (geoLocation['latitude'], geoLocation['longitude'])))
         print('---------------------------------------------------------------')
         return {'Gage': self.id, 'County': county,'CountyFIPS': siteCode,'State': state,'Coordiantes':(geoLocation['latitude'], geoLocation['longitude'])}
-        
+
+# A subclass of USGS_Gage that can download Discharge data
 class USGS_Gage_DataRetriever(USGS_Gage):
     
     def __init__(self, usgsid, st=None, ed=None, metric=True, autoDates=True):
@@ -97,6 +100,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         self.ismetric = metric      
         self.data = None
         self.autodate = autoDates
+        
         if (self.autodate is True) & (st is None) & (ed is None):
             print('---------------------------------------------------------------')
             print('Retrieving MetaData for Discharge time period')
@@ -202,6 +206,82 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         # Sort the data in desending order and choose the top x events
         dat = self.data.sort_values(by = ['Flow ({})'.format(self.getUnit())], ascending=False).reset_index(drop=True)
         return dat.iloc[:top_x,]
+    
+    
+    def trendTest(self, time_scale, least_records, target_alpha): #HKM added / Jul.30.2020
+        if self.data is None:
+            self.data = self.getDailyDischarge()
+
+        t_Q = self.data.rename(columns={'Flow ({})'.format(self.getUnit()):'Flow'})
+
+        # If we have a date gap, we should modify this code lines
+        # Here, I assume that USGS provides continuous data
+        valid_flag = True
+        if time_scale == 'M': # Monthly trend
+            t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y-%m')).Flow.agg(['mean'])
+            if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
+                valid_flag = False
+                print(f'    Data at this gage has records shorter than your defined {least_records} months.\n')
+
+        elif time_scale == 'Y': # Yearly trend
+            t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y')).Flow.agg(['mean'])
+            if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
+                valid_flag = False
+                print(f'    Data at this gage has records shorter than your defined {least_records} years.\n')
+
+        else:
+            raise Exception('Invalid time scale. Please select M (monthly trend) or Y (yearly trend)')
+
+        if valid_flag:
+            x = np.arange((len(t_Q_aggr)))
+            y = t_Q_aggr.to_numpy().ravel()
+
+            # Theilslopes
+            R_TS = stats.theilslopes(y, x, alpha = 1 - target_alpha)
+            """            
+            Ruetunrs:
+            1) medslope : float
+                Theil slope.
+            2) medintercept : float
+                Intercept of the Theil line, as median(y) - medslope*median(x).
+            3) lo_slope : float
+                Lower bound of the confidence interval on medslope.
+            4) up_slope : float
+                Upper bound of the confidence interval on medslope.
+            https://docs.scipy.org/doc/scipy-0.15.1/reference/generated/scipy.stats.mstats.theilslopes.html
+            """
+
+            # Mann Kendall Trend Test
+            R_MK = mkt.test(x, y, 1, target_alpha,"upordown")
+            """
+            Returns
+            1) MK : string
+                result of the statistical test indicating whether or not to accept hte
+                alternative hypothesis 'Ha'
+            2) m : scalar, float
+                slope of the linear fit to the data
+            3) c : scalar, float
+                intercept of the linear fit to the data
+            4) p : scalar, float, greater than zero
+                p-value of the obtained Z-score statistic for the Mann-Kendall test
+            # https://up-rs-esp.github.io/mkt/_modules/mkt.html
+            """
+            if (R_MK[3] < target_alpha) & (R_MK[1] > 0):
+                trend_result = 1 # increasing trend
+                slope_result = R_TS[0]
+            elif (R_MK[3] < target_alpha) & (R_MK[1] < 0):
+                trend_result = -1 # decreasing trend
+                slope_result = R_TS[0]
+            else:
+                trend_result = 0 # no trend
+                slope_result = 0
+        else: # Any cases we cannot conduct the trend analysis
+            trend_result = np.nan
+            slope_result = np.nan
+            R_TS = np.nan
+            R_MK = np.nan
+
+        return trend_result, slope_result, R_TS, R_MK
 
 
 ## Test example

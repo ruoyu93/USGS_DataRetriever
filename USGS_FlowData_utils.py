@@ -68,6 +68,7 @@ class USGS_Gage:
         date = datetime.strptime(s_date, "%Y-%m-%d")
         modified_date = date + timedelta(days=3)
         date_3daysAfter = datetime.strftime(modified_date, "%Y-%m-%d") # 3 days later
+        
         # Get its geoLocation and county, state
         url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&parameterCd={}&siteStatus=all'.format(
                     self.id, self.startdate, date_3daysAfter, var_id)
@@ -103,7 +104,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
                 vars_info = self.getVarsMetaData()
                 self.startdate = vars_info['Start Date'][vars_info['Variable ID'] == '00060'].values[0]
                 self.enddate = vars_info['End Date'][vars_info['Variable ID'] == '00060'].values[0]
-                print('    New dates from',self.startdate,'to',self.enddate)
+                print('    Setting new dates from',self.startdate,'to',self.enddate)
             except:
                 raise Exception("No Data Found at This Gage!")
         elif (autoDates is True) & (st is not None) & (ed is not None):   # if user spe
@@ -112,7 +113,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
                 vars_info = self.getVarsMetaData()
                 self.startdate = vars_info['Start Date'][vars_info['Variable ID'] == '00060'].values[0]
                 self.enddate = vars_info['End Date'][vars_info['Variable ID'] == '00060'].values[0]
-                print('    New dates from',self.startdate,'to',self.enddate)
+                print('    Setting new dates from',self.startdate,'to',self.enddate)
             except:
                 raise Exception("No Data Found at This Gage!")
         elif (autoDates is False) & (st is not None) & (ed is not None):

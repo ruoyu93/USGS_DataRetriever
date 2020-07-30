@@ -8,7 +8,7 @@ import requests
 from datetime import datetime, timedelta, date
 from pandas.plotting import register_matplotlib_converters
 from scipy import stats
-import mkt
+import mkt # Mann Kendall test lib is required (mkt.py)
 register_matplotlib_converters()
 
 # Super Class: get MetaData for a gage

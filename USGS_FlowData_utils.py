@@ -213,7 +213,8 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             self.data = self.getDailyDischarge()
 
         t_Q = self.data.rename(columns={'Flow ({})'.format(self.getUnit()):'Flow'})
-
+        reason = "no issues"
+        t_Q.Date = pd.to_datetime(t_Q.Date)
         # If we have a date gap, we should modify this code lines
         # Here, I assume that USGS provides continuous data
         valid_flag = True
@@ -282,7 +283,8 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             slope_result = np.nan
             R_TS = np.nan
             R_MK = np.nan
-
+            reason = "other issues rather than the data shortage"
+            
         return trend_result, slope_result, R_TS, R_MK, reason
 
 

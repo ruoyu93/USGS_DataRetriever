@@ -221,15 +221,13 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         if time_scale == 'M': # Monthly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y-%m')).Flow.agg(['mean'])
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
-                valid_flag = False
-                reason = "data shortage"
+                valid_flag = False                
                 print(f'    Data at this gage has records shorter than your defined {least_records} months.\n')
 
         elif time_scale == 'Y': # Yearly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y')).Flow.agg(['mean'])
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
-                valid_flag = False
-                reason = "data shortage"
+                valid_flag = False                
                 print(f'    Data at this gage has records shorter than your defined {least_records} years.\n')
 
         else:
@@ -242,7 +240,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             # Theilslopes
             R_TS = stats.theilslopes(y, x, alpha = 1 - target_alpha)
             """            
-            Ruetunrs:
+            Retunrs:
             1) medslope : float
                 Theil slope.
             2) medintercept : float
@@ -257,8 +255,8 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             # Mann Kendall Trend Test
             R_MK = mkt.test(x, y, 1, target_alpha,"upordown")
             """
-            Returns
-            1) MK : string
+            Returns:
+            1) MK : binary (1: accept 'Ha' = trend exists / 0: reject 'Ha' = no trend)
                 result of the statistical test indicating whether or not to accept hte
                 alternative hypothesis 'Ha'
             2) m : scalar, float
@@ -269,22 +267,22 @@ class USGS_Gage_DataRetriever(USGS_Gage):
                 p-value of the obtained Z-score statistic for the Mann-Kendall test
             # https://up-rs-esp.github.io/mkt/_modules/mkt.html
             """
-            if (R_MK[3] < target_alpha) & (R_MK[1] > 0):
+            if (R_MK[0] == 1) & (R_MK[1] > 0):
                 trend_result = 1 # increasing trend
                 slope_result = R_TS[0]
-            elif (R_MK[3] < target_alpha) & (R_MK[1] < 0):
+            elif (R_MK[0] == 1) & (R_MK[1] < 0):
                 trend_result = -1 # decreasing trend
                 slope_result = R_TS[0]
             else:
                 trend_result = 0 # no trend
                 slope_result = 0
-        else: # Any cases we cannot conduct the trend analysis
+        else: # for data shortage cases
             trend_result = np.nan
             slope_result = np.nan
             R_TS = np.nan
             R_MK = np.nan
-            reason = "other issues rather than the data shortage"
-            
+            reason = "data shortage"
+         
         return trend_result, slope_result, R_TS, R_MK, reason
 
 

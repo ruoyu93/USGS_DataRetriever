@@ -220,14 +220,18 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         valid_flag = True
         if time_scale == 'M': # Monthly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y-%m')).Flow.agg(['mean'])
-            if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
+            t_aggr_date = (t_Q.Date.apply(lambda x : x.replace(day=1)).unique()) # extract first day of month
+            
+            if len(t_Q_aggr) < least_records: # We should have more than least_record-month lenth of data
                 valid_flag = False
                 reason = "data shortage"
                 print(f'    Data at this gage has records shorter than your defined {least_records} months.\n')
 
         elif time_scale == 'Y': # Yearly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y')).Flow.agg(['mean'])
-            if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
+            t_aggr_date = (t_Q.Date.apply(lambda x : x.replace(month=1, day=1)).unique()) # extract fist month/day of year
+            
+            if len(t_Q_aggr) < least_records: # We should have more than least_records-year lenth of data
                 valid_flag = False
                 reason = "data shortage"
                 print(f'    Data at this gage has records shorter than your defined {least_records} years.\n')

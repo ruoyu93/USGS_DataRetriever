@@ -291,24 +291,29 @@ def test(t, x, eps=None, alpha=None, Ha=None):
     if Ha == "up":
         Z_ = ndtri(1. - alpha)
         if Zmk >= Z_:
-            MK = "accept Ha := upward trend"
+            #MK = "accept Ha := upward trend"
+            MK = 1
         else:
-            MK = "reject Ha := upward trend"
+            #MK = "reject Ha := upward trend"
+            MK = 0
     # Ha := There is a downward monotonic trend
     elif Ha == "down":
         Z_ = ndtri(1. - alpha)
         if Zmk <= -Z_:
-            MK = "accept Ha := downward trend"
+            #MK = "accept Ha := downward trend"
+            MK = 1
         else:
-            MK = "reject Ha := downward trend"
+            #MK = "reject Ha := downward trend"
+            MK = 0
     # Ha := There is an upward OR downward monotonic trend
     elif Ha == "upordown":
         Z_ = ndtri(1. - alpha / 2.)
         if np.fabs(Zmk) >= Z_:
-            MK = "accept Ha := upward OR downward trend"
+            #MK = "accept Ha := upward OR downward trend"
+            MK = 1
         else:
-            MK = "reject Ha := upward OR downward trend"
-
+            #MK = "reject Ha := upward OR downward trend"
+            MK = 0
     # ----------
     # AS A BONUS
     # ----------

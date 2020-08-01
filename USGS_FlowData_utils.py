@@ -208,7 +208,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         return dat.iloc[:top_x,]
     
     
-    def trendTest(self, time_scale, least_records, target_alpha): #HKM added / Jul.30.2020
+    def trendTest(self, time_scale, least_records, target_alpha, plot = False): #HKM added / Jul.30.2020
         if self.data is None:
             self.data = self.getDailyDischarge()
 
@@ -284,7 +284,29 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             R_TS = np.nan
             R_MK = np.nan
             reason = "other issues rather than the data shortage"
-            
+       
+        if plot: # monthly or yearly plot with the regression line
+            if (trend_result == -1) | (trend_result == 1):
+                fig, ax = plt.subplots(figsize=(15,5))
+                ax.plot(t_aggr_date, y, t_aggr_date, R_TS[0]*np.arange(len(t_aggr_date)) 
+                        + R_TS[1], 'r--', linewidth=2)
+                ax.set_xlabel('Date', fontsize=12)
+                ax.set_ylabel('Discharge {}'.format(self.getUnit()), fontsize=12)
+                ax.set_title('Discharge at USGS {}'.format(self.id),fontsize = 16)
+         
+            elif trend_result == 0:
+                fig, ax = plt.subplots(figsize=(15,5))
+                ax.plot(t_aggr_date, y, linewidth=2)
+                ax.set_xlabel('Date', fontsize=12)
+                ax.set_ylabel('Discharge {}'.format(self.getUnit()), fontsize=12)
+                ax.set_title('Discharge at USGS {}'.format(self.id),fontsize = 16)
+                plt.text(t_aggr_date[round(len(t_aggr_date)/2)], (max(y)-min(y))/2, 
+                         "No Trend", size=50, rotation=30.,ha="center", va="center",
+                         bbox=dict(boxstyle="round",ec=(1., 0.5, 0.5),fc=(1., 0.8, 0.8),))
+                
+            else:
+                raise Exception('Not enough data to plot')
+                
         return trend_result, slope_result, R_TS, R_MK, reason
 
 

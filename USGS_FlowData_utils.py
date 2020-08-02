@@ -5,11 +5,11 @@ import json
 import numpy as np
 from bs4 import BeautifulSoup
 import requests
-from datetime import datetime, timedelta, date
 from pandas.plotting import register_matplotlib_converters
 from scipy import stats
 import mkt
 register_matplotlib_converters()
+import statsmodels.api as sm
 
 # Super Class: get MetaData for a gage
 class USGS_Gage:
@@ -18,6 +18,7 @@ class USGS_Gage:
         self.id = str(usgsid)
         self.vars_info = None
         self.geo_info = {}
+
         
     def getVarsMetaData(self):
         
@@ -50,7 +51,7 @@ class USGS_Gage:
             print('USGS Gage', self.id, 'has following variables:')
             out_frame = pd.DataFrame(columns = ['Variable Name', 'Variable ID', 'Start Date', 'End Date'])
             for i in range(len(metaData['Variables'])):
-                print("    {:>15} from {} to {}".format(metaData['Variables'][i]['variableName'], metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']))
+                print("{}. {:>25} from {} to {}".format(i, metaData['Variables'][i]['variableName'], metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']))
                 out_frame.loc[i] = [metaData['Variables'][i]['variableName'], metaData['Variables'][i]['variableID'], 
                                     metaData['Variables'][i]['startDate'], metaData['Variables'][i]['endDate']]
             print('----------------------------------------------------------')
@@ -67,9 +68,9 @@ class USGS_Gage:
             s_date = self.vars_info['Variables'][0]['startDate']
             var_id = self.vars_info['Variables'][0]['variableID']
 
-        date = datetime.strptime(s_date, "%Y-%m-%d")
-        modified_date = date + timedelta(days=3)
-        date_3daysAfter = datetime.strftime(modified_date, "%Y-%m-%d") # 3 days later
+        date = pd.to_datetime(s_date, format="%Y-%m-%d")
+        modified_date = date + pd.DateOffset(days=3)
+        date_3daysAfter = modified_date.strftime(format = "%Y-%m-%d") # 3 days later
         
         # Get its geoLocation and county, state
         url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&parameterCd={}&siteStatus=all'.format(
@@ -77,6 +78,8 @@ class USGS_Gage:
         response = json.loads(urllib.request.urlopen(url).read())
         geoLocation = response['value']['timeSeries'][0]["sourceInfo"]["geoLocation"]["geogLocation"]
         siteCode = str(response['value']['timeSeries'][0]["sourceInfo"]["siteProperty"][3]['value'])
+        self.noDataValue = response['value']['timeSeries'][0]['variable']['noDataValue']
+        
         county_list = pd.read_csv('https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt', dtype=str, header=None)
         county_list['FIPS'] = county_list[1] + county_list[2]
         county, state = county_list[county_list['FIPS']==siteCode].values[0][3].split()[0], county_list[county_list['FIPS']==siteCode].values[0][0]
@@ -100,6 +103,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         self.ismetric = metric      
         self.data = None
         self.autodate = autoDates
+        self.stat = None
         
         if (self.autodate is True) & (st is None) & (ed is None):
             print('---------------------------------------------------------------')
@@ -127,7 +131,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             raise Exception(''' ERROR:\nNo dates defined! You need to define start date (end date) or set autoDates to True!''')
             
     # A method to get daily discharge time-series 
-    def getDailyDischarge(self):
+    def getDailyDischarge(self, drop_nodata = True):
         # Get the JSON file from USGS server
         try:
             url = 'https://waterservices.usgs.gov/nwis/dv/?format=json&sites={}&startDT={}&endDT={}&parameterCd=00060&siteStatus=all'.format(
@@ -147,8 +151,12 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             
             # Organize data in a data frame
             st = pd.DataFrame({'Date': date, 'Flow ({})'.format(self.getUnit()): data})
-            self.data = st
-            return st
+            if drop_nodata:
+                print("    Drop {} no data attributes".format(len(st[st['Flow ({})'.format(self.getUnit())]<0])))
+                self.data = st[st['Flow ({})'.format(self.getUnit())] >=0]
+            else:
+                self.data = st
+            return self.data
         except:
             raise Exception('ERROR:\nNO Discharge Data at this gage! \nChoose another gage')
             
@@ -158,7 +166,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         
         # Call the method getDailyDischarge(), and define the start and end dates
         if self.data is None:
-            self.data = self.getDailyDischarge()
+            self.getDailyDischarge()
         
         # Print the statistics of daily discharge
         print("Summary of flow from",self.startdate,"to",self.enddate)
@@ -172,6 +180,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         stat_frame = {"Min": self.data.iloc[:,1].min(), "Median": self.data.iloc[:,1].median(), 
                       "Max": self.data.iloc[:,1].max(), "Mean": self.data.iloc[:,1].mean(),
                                      "Standard Deviation": self.data.iloc[:,1].std()}
+        self.stat = stat_frame
         return stat_frame
     # A method to return the unit, either cfs or cms (cubit foot/meter per second)
     def getUnit(self):
@@ -208,7 +217,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         return dat.iloc[:top_x,]
     
     
-    def trendTest(self, time_scale, least_records, target_alpha, plot = False): #HKM added / Jul.30.2020
+    def trendTest(self, time_scale, least_records, target_alpha=0.05, plot = False): #HKM added / Jul.30.2020
         if self.data is None:
             self.data = self.getDailyDischarge()
 
@@ -221,7 +230,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         if time_scale == 'M': # Monthly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y-%m')).Flow.agg(['mean'])
             t_aggr_date = (t_Q.Date.apply(lambda x : x.replace(day=1)).unique())
-            
+
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
                 valid_flag = False
                 reason = "data shortage"
@@ -230,7 +239,7 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         elif time_scale == 'Y': # Yearly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y')).Flow.agg(['mean'])
             t_aggr_date = (t_Q.Date.apply(lambda x : x.replace(month=1, day=1)).unique())
-            
+
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
                 valid_flag = False
                 reason = "data shortage"
@@ -282,6 +291,8 @@ class USGS_Gage_DataRetriever(USGS_Gage):
             else:
                 trend_result = 0 # no trend
                 slope_result = 0
+                
+                
         else: # Any cases we cannot conduct the trend analysis
             trend_result = np.nan
             slope_result = np.nan
@@ -316,20 +327,35 @@ class USGS_Gage_DataRetriever(USGS_Gage):
                 raise Exception('Not enough data to plot')
                 
         return trend_result, slope_result, R_TS, R_MK, reason
+            
+        
 
 
 ## Test example
 #import time
 #stime = time.time()
-#data = pd.read_csv("va_gages.csv", dtype=str)
-#for i in range(0,30):
+#data = pd.read_csv("gages_list.csv", dtype=str)
+#trend_out = pd.DataFrame(columns = ['GageID','Start Data','End Data', 'Min','Median','Max','Mean','slope (M)','p-value (M)','slope (Y)', 'p-value (Y)','County','CountyID','State','Coordinate'])
+#count = 0
+#for i in range(len(data)):
 #    rcode = data["SOURCE_FEA"][i]
+#    print("Working on gage", rcode)
 #    try:
 #        site = USGS_Gage_DataRetriever(rcode,  metric=False)
-#        site.getDailyDischarge()
+#        stat = site.getStatistics()
+#        trend_result_m, slope_result_m, R_TS_m, R_MK_m, reason = site.trendTest('M', 120)
+#        trend_result_y, slope_result_y, R_TS_y, R_MK_y, reason = site.trendTest('Y', 10)
+#        geoMeta = site.getGeoMetaData()
+#        
+#        trend_out.loc[count] = [site.id, site.startdate, site.enddate, stat['Min'], stat['Median'], stat['Max'], stat['Mean'], R_TS_m[0], R_MK_m[-1], R_TS_y[0], R_MK_y[-1],
+#                                geoMeta['County'], geoMeta['CountyFIPS'], geoMeta['State'],geoMeta['Coordiantes']]
+#        
+#        count +=1
 #        # site.getGeoMetaData()
+#        print('{} completed'.format(round((i+1)/len(data)*100,2)))
 #    except:
-#        print("")
+#        
+#        print("Fail to find data.")
 #        continue
 #print(time.time()-stime)
 

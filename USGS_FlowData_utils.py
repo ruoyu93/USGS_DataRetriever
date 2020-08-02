@@ -220,6 +220,8 @@ class USGS_Gage_DataRetriever(USGS_Gage):
         valid_flag = True
         if time_scale == 'M': # Monthly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y-%m')).Flow.agg(['mean'])
+            t_aggr_date = (t_Q.Date.apply(lambda x : x.replace(day=1)).unique())
+            
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
                 valid_flag = False
                 reason = "data shortage"
@@ -227,6 +229,8 @@ class USGS_Gage_DataRetriever(USGS_Gage):
 
         elif time_scale == 'Y': # Yearly trend
             t_Q_aggr = t_Q.groupby(t_Q.Date.dt.strftime('%Y')).Flow.agg(['mean'])
+            t_aggr_date = (t_Q.Date.apply(lambda x : x.replace(month=1, day=1)).unique())
+            
             if len(t_Q_aggr) < least_records: # We should have more than 10-year lenth of data
                 valid_flag = False
                 reason = "data shortage"
@@ -292,7 +296,11 @@ class USGS_Gage_DataRetriever(USGS_Gage):
                         + R_TS[1], 'r--', linewidth=2)
                 ax.set_xlabel('Date', fontsize=12)
                 ax.set_ylabel('Discharge {}'.format(self.getUnit()), fontsize=12)
-                ax.set_title('Discharge at USGS {}'.format(self.id),fontsize = 16)
+                
+                if time_scale == 'Y':
+                    ax.set_title('Yearly Discharge at USGS {}'.format(self.id),fontsize = 16)
+                else:
+                    ax.set_title('Monthly Discharge at USGS {}'.format(self.id),fontsize = 16)
          
             elif trend_result == 0:
                 fig, ax = plt.subplots(figsize=(15,5))
